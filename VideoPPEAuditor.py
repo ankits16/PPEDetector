@@ -27,7 +27,7 @@ class VideoPPEAuditor:
         # print(play.url)
         # cap = cv2.VideoCapture(play.url)
         # cap = cv2.VideoCapture("/Users/ankit/Downloads/PPE_3.mp4")
-        cap = cv2.VideoCapture("testVideos/PPE_2.mp4")
+        cap = cv2.VideoCapture("testVideos/PPE_6.mp4")
         fps = cap.get(cv2.CAP_PROP_FPS)
         print("<<<<<< fps is {}".format(fps))
         self.frames = []

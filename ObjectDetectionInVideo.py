@@ -25,7 +25,7 @@ print(output_layers)
 #
 # # cap = cv2.VideoCapture("/Users/ankit/Downloads/darknet-Alex/PPE/unseen/demoVideo.mp4")
 # cap = cv2.VideoCapture(play.url)
-cap = cv2.VideoCapture("/Users/ankit/Downloads/PPE_1.mp4")
+cap = cv2.VideoCapture("/Users/ankit/Downloads/PPE_6.mp4")
 colors=[tuple(255 * np.random.rand(3)) for i in range(5)]
 
 def detectObjectsInFrame(img):

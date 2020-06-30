@@ -53,6 +53,12 @@ class ImagePPEAuditor:
 
         # showing information on screen
         self.detectedObjects = []
+        class_ids = []
+        confidences = []
+        boxes = []
+        conf_threshold = 0.5
+        nms_threshold = 0.4
+
         for out in outs:
             for detection in out:
 
@@ -69,7 +75,22 @@ class ImagePPEAuditor:
 
                     topX = int(center_x - w / 2)
                     topY = int(center_y - h / 2)
-                    self.detectedObjects.append(DetectedObject([topX, topY, w, h], class_id, (confidence) * 100))
+                    class_ids.append(class_id)
+                    confidences.append(float(confidence))
+                    boxes.append([topX, topY, w, h])
+                    # self.detectedObjects.append(DetectedObject([topX, topY, w, h], class_id, (confidence) * 100))
+
+        indices = cv2.dnn.NMSBoxes(boxes, confidences, conf_threshold, nms_threshold)
+        print("<<<<<<<<<<<< after NMS>>>>>>>>>>>>>>>>>>")
+        for i in indices:
+            i = i[0]
+            box = boxes[i]
+            topX = box[0]
+            topY = box[1]
+            w = box[2]
+            h = box[3]
+            print("class = {id}, confidence = {c}".format(id=PPEClasses().getPPEClass(class_ids[i]).name, c=confidences[i]))
+            self.detectedObjects.append(DetectedObject([topX, topY, w, h], class_ids[i], (confidences[i]) * 100))
 
         number_objects_detected = len(self.detectedObjects)
         print("\n<<<<<<<< detected objects = {num}\n".format(num=number_objects_detected))
