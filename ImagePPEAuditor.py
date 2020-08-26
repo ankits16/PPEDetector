@@ -1,10 +1,10 @@
 import cv2
 import numpy as np
-from enum import Enum
 
+from enum import Enum
 from DetectedObject import DetectedObject
-from PPEClasses import PPEClasses
-from HatHeadDetetctor import HatHeadDetetctor
+from Models import PPEClasses, PPEHardHatDetection
+from HatHeadDetector import HatHeadDetector
 
 
 class PPEComplianceStatus(Enum):
@@ -12,47 +12,45 @@ class PPEComplianceStatus(Enum):
     Review = 1
 
 
-
-class PPEDetection:
-    def __init__(self, detectedHats, detectedHeads, complianceStatus):
-        self.detectedHats = detectedHats
-        self.detectedHeads = detectedHeads
-        self.complianceStatus = complianceStatus
-
-
 class ImagePPEAuditor:
+    """
+    Takes an image as input and checks if PPE compliance is observed in that image or not
+    """
+    def __initialize_image_ppe_auditor(self):
 
-    def __initializeImagePPEAuditor(self):
-        print("initializeCalled")
-        self.net = cv2.dnn.readNetFromDarknet('/Users/ankit/Downloads/darknet-Alex/PPE/cfg/ppe_yolov3-tiny.cfg',
-                                         '/Users/ankit/Downloads/darknet-Alex/ppe_yolov3-tiny_5000.weights')
+        self.net = cv2.dnn.readNetFromDarknet('yolo/ppe_yolov3-tiny.cfg', 'yolo/ppe_yolov3-tiny_5000.weights')
         self.layer_names = self.net.getLayerNames()
         self.output_layers = [self.layer_names[i[0] - 1] for i in self.net.getUnconnectedOutLayers()]
-        self.ppeClasses = PPEClasses().getAllPPEClasses()
-
+        self.ppe_classes = PPEClasses().get_all_ppe_classes()
 
     def __init__(self):
-        self.__initializeImagePPEAuditor()
-
-    def runPPEDetection(self):
-        sourceImage = input("Enter Image path:")
-        img = cv2.imread(sourceImage)
-        self.detectObjectsInFrame(img)
-
-    def detectObjectsInFrame(self, img):
-        self.img = img
+        self.img = None
         self.detectedObjects = []
-        if not hasattr(img, 'shape'):
+        self.__initialize_image_ppe_auditor()
+
+    def run_ppe_detection(self):
+        source_image = input("Enter Image path:")
+        img = cv2.imread(source_image)
+        self.detect_objects_in_frame(img)
+
+    def detect_objects_in_frame(self, input_image_frame):
+        """
+        detect objects in an input image frame
+        :param input_image_frame: target image frame on which object detection will be run
+        :return: None
+        """
+        self.img = input_image_frame
+        self.detectedObjects = []
+        if not hasattr(input_image_frame, 'shape'):
             return
-        height, width, channels = img.shape
-        blob = cv2.dnn.blobFromImage(img, 0.00392, (416, 416), (0, 0, 0), True, crop=False)
+        height, width, channels = input_image_frame.shape
+        blob = cv2.dnn.blobFromImage(input_image_frame, 0.00392, (416, 416), (0, 0, 0), True, crop=False)
 
         # Detection
         self.net.setInput(blob)
         outs = self.net.forward(self.output_layers)
 
         # showing information on screen
-        self.detectedObjects = []
         class_ids = []
         confidences = []
         boxes = []
@@ -61,105 +59,89 @@ class ImagePPEAuditor:
 
         for out in outs:
             for detection in out:
-
                 scores = detection[5:]
                 class_id = np.argmax(scores)
                 confidence = scores[class_id]
                 if confidence > 0.4:
-                    print("class = {id}, confidence = {c}".format(id=PPEClasses().getPPEClass(class_id).name, c=confidence))
                     center_x = int(detection[0] * width)
                     center_y = int(detection[1] * height)
                     w = int(detection[2] * width)
                     h = int(detection[3] * height)
-                    # cv2.circle(img, (center_x, center_y), 10, (255, 255, 0), 2)
-
-                    topX = int(center_x - w / 2)
-                    topY = int(center_y - h / 2)
+                    top_x = int(center_x - w / 2)
+                    top_y = int(center_y - h / 2)
                     class_ids.append(class_id)
                     confidences.append(float(confidence))
-                    boxes.append([topX, topY, w, h])
-                    # self.detectedObjects.append(DetectedObject([topX, topY, w, h], class_id, (confidence) * 100))
-
+                    boxes.append([top_x, top_y, w, h])
         indices = cv2.dnn.NMSBoxes(boxes, confidences, conf_threshold, nms_threshold)
-        print("<<<<<<<<<<<< after NMS>>>>>>>>>>>>>>>>>>")
         for i in indices:
             i = i[0]
             box = boxes[i]
-            topX = box[0]
-            topY = box[1]
+            top_x = box[0]
+            top_y = box[1]
             w = box[2]
             h = box[3]
-            print("class = {id}, confidence = {c}".format(id=PPEClasses().getPPEClass(class_ids[i]).name, c=confidences[i]))
-            self.detectedObjects.append(DetectedObject([topX, topY, w, h], class_ids[i], (confidences[i]) * 100))
+            self.detectedObjects.append(DetectedObject([top_x, top_y, w, h], class_ids[i], (confidences[i]) * 100))
 
-        number_objects_detected = len(self.detectedObjects)
-        print("\n<<<<<<<< detected objects = {num}\n".format(num=number_objects_detected))
-
-    def getNumberOfHatDetectedOnHead(self):
+    def get_number_of_hat_detected_on_head(self):
+        """
+        :return: a tuple with an array of detected hat object which are present over heads, detected head objects
+        """
         hats = [x for x in self.detectedObjects if x.class_id == 0]
         heads = [x for x in self.detectedObjects if x.class_id == 3]
-        hatsOverheads = []
-        for aHardHat in hats:
-            hatHeadDetector = HatHeadDetetctor(aHardHat, heads)
-            if hatHeadDetector.checkIfHatIsPresentWithHead():
-                hatsOverheads.append(aHardHat)
-        return (hatsOverheads, heads)
+        hats_overheads = []
+        for a_hard_hat in hats:
+            hat_head_detector = HatHeadDetector(a_hard_hat, heads)
+            if hat_head_detector.check_if_hat_is_present_over_head():
+                hats_overheads.append(a_hard_hat)
+        return hats_overheads, heads
 
-    def getPPEComplianceStatus(self):
-        hardHats, heads = self.getNumberOfHatDetectedOnHead()
+    def get_ppe_compliance_status(self):
+        """
+        :return: PPEComplianceStatus
+        """
+        hard_hats, heads = self.get_number_of_hat_detected_on_head()
         status = PPEComplianceStatus.Review
         if len(heads) > 0:
-            if len(heads) == len(hardHats):
+            if len(heads) == len(hard_hats):
                 status = PPEComplianceStatus.Compliance
         return status
 
-    def getPPEDetection(self, img = None):
-        # if img == None:
-        #     self.runPPEDetection()
-        # else:
-        #     self.detectObjectsInFrame(img)
+    def get_ppe_detection(self, input_image_frame=None):
+        """
+        :param input_image_frame: target image frame on which object detection will be run
+        :return: a PPEHardHatDetection object
+        """
+        self.detect_objects_in_frame(input_image_frame)
+        hats, heads = self.get_number_of_hat_detected_on_head()
+        return PPEHardHatDetection(hats, heads, self.get_ppe_compliance_status())
 
-        self.detectObjectsInFrame(img)
-        hats, heads = self.getNumberOfHatDetectedOnHead()
-        return PPEDetection(hats,heads,self.getPPEComplianceStatus())
-
-    def showDetectsOnImage(self):
-
+    def show_detects_on_image(self):
+        """
+        draw bounding boxes on image frames
+        :return: None
+        """
         font = cv2.FONT_HERSHEY_COMPLEX_SMALL
         heads = [x for x in self.detectedObjects if x.class_id == 3]
-        hatOverHeadsCount = 0
+        hat_over_heads_count = 0
         for i in range(len(self.detectedObjects)):
             x, y, w, h = self.detectedObjects[i].box
-            print("typs is  {type}".format(type=type(self.detectedObjects[i].box)))
-            label = "{name} - {confidence}".format(name=str(PPEClasses().getPPEClass(self.detectedObjects[i].class_id).name),
-                                                   confidence=int(self.detectedObjects[i].confidence))
+            label = "{name} - {confidence}".format(
+                name=str(PPEClasses().get_ppe_class(self.detectedObjects[i].class_id).name),
+                confidence=int(self.detectedObjects[i].confidence))
             color = (0, 255, 0)
             border = 1
-            if self.detectedObjects[i].isDetectedObjectHardHat():
-                print("$$$$$$$$ hard hat detected")
-                hatHeadDetector = HatHeadDetetctor(self.detectedObjects[i], heads)
-                if hatHeadDetector.checkIfHatIsPresentWithHead():
-                    print("%%%%%%%%%%% hat is present with head")
-                    hatOverHeadsCount = hatOverHeadsCount + 1
+            if self.detectedObjects[i].is_detected_object_hard_hat():
+                hat_head_detector = HatHeadDetector(self.detectedObjects[i], heads)
+                if hat_head_detector.check_if_hat_is_present_over_head():
+                    hat_over_heads_count = hat_over_heads_count + 1
                     color = (255, 153, 255)
                     border = 2
 
-            cv2.rectangle(self.img, self.detectedObjects[i].getRectangle().getTopLeft(),
-                          self.detectedObjects[i].getRectangle().getBottomRight(), color, border)
+            cv2.rectangle(self.img,
+                          self.detectedObjects[i].get_rectangle().get_top_left(),
+                          self.detectedObjects[i].get_rectangle().get_bottom_right(),
+                          color,
+                          border
+                          )
 
             cv2.putText(self.img, label, (x, y + 30), font, .75, (0, 0, 0), 1)
-            # cv2.imshow("Image", self.img)
-            # cv2.waitKey(0)
-            # cv2.destroyAllWindows()
-
-
-# auditor = ImagePPEAuditor()
-# detection = auditor.getPPEDetection()
-# print(detection.complianceStatus)
-# auditor.showDetectsOnImage()
-# auditor.runPPEDetection()
-# hardHats, heads = auditor.getNumberOfHatDetectedOnHead()
-#
-# print("hats = {}, heads = {}".format(len(hardHats), len(heads)))
-#
-# print(auditor.getPPEComplianceStatus())
